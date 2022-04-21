@@ -134,5 +134,50 @@ Species_summary<-Species_summary %>% mutate(
 )
 ```
 
+In order to plot, we need avg # of observation per 100 trap nights per species, not grouped by camera
+
+```{r}
+Obs_summary<-Species_summary %>% group_by(choice, Treatment) %>% summarise(
+  avg_obs_100 = mean(obs_per_100,na.rm = T),
+  sd_obs_100 = sd(obs_per_100,na.rm =T)
+)
+```
+
+Let's plot!
+
+```{r}
+ggplot(Obs_summary, aes(choice, avg_obs_100, fill = Treatment))+
+  geom_col(position = "dodge")+
+  coord_flip()+
+  labs(x = "Species", y = "Avg. observations per 100 nights")
+```
+Let's do a statistical test (ANOVA) comparing the average number of observations between treatments, regardless of species.
+```{r}
+Treatment<-Species_summary %>% group_by(Cam_SD, Treatment) %>% summarise(
+  Obs_per_100 = sum(obs_per_100, na.rm = T)
+)
+```
+Now let's run an anova
+
+```{r}
+my_model<-glm(Obs_per_100~Treatment, data = Treatment)
+summary(my_model)
+anova(my_model)
+```
+Now let's see if there is a difference in the number of species detected between the two methods
+
+```{r}
+NumSpecies<-Species_summary %>% group_by(Cam_SD,Treatment) %>% summarise(
+  NumSpecies = length(choice)
+)
+```
+
+Now run a glm to see if there is a statistical difference in the # of species per treatment
+
+```{r}
+num_model<-glm(NumSpecies~Treatment, data = NumSpecies)
+summary(num_model)
+anova(num_model)
+```
 
 
