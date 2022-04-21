@@ -1,0 +1,30 @@
+---
+title: "Git helper file"
+output: html_notebook
+---
+
+Here are some helpers for using git with Rstudio.  All of these commands will be run from a terminal window.
+
+## Check what branch you are on
+
+To determine what branch you are on, type
+
+`git branch` and R will tell you the branches that exist, and will note the branch you are on with an asterisk.
+
+## Create a new branch
+
+To create a new branch from RStudio,  type the following code:
+
+`git branch <branch name>` which creates the new branch
+
+To work from that new branch, type
+
+`git checkout <branch name>` which puts you onto the new branch
+
+## initialize the new branch on github
+
+Before you can push from the new branch, you need to initialize it on github. You only need to do this once for the branch, not each time you want to push.
+
+Type `git push --set-upstream origin <branch-name>` and it will activate the push button in the RStudio IDE
+
+
