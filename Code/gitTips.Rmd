@@ -27,4 +27,10 @@ Before you can push from the new branch, you need to initialize it on github. Yo
 
 Type `git push --set-upstream origin <branch-name>` and it will activate the push button in the RStudio IDE
 
+## delete merged branches from local repo
+Once a pull request has been successfully completed and the feature branch deleted from github, you can delete the branch from your local instance as well. This step just keeps things clean. Not doing it won't hurt anything.
+
+To delete any merged branchs from your local repo, make sure you are in the main branch, and then type
+`git branch -d $(git branch --merged)` 
+
 
