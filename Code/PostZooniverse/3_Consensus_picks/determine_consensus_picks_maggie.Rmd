@@ -219,7 +219,8 @@ Assigned<-data.frame(subject_ids = integer(length(Subjects_to_keep)),
                 Img2 = character(length(Subjects_to_keep)),
                 Img3 = character(length(Subjects_to_keep)),
                 CamNum = integer(length(Subjects_to_keep)), 
-                choice = character (length(Subjects_to_keep)))
+                choice = character (length(Subjects_to_keep))
+)
 ```
 Now loop
 ```{r}
@@ -240,7 +241,31 @@ for(i in 1:length(Subjects_to_keep)){
  
 }
 ```
-Now save
+Now join some columns from Flat
+
+first extract them for simplicity
+```{r}
+meta<-Flat %>% select(classification_id,subject_ids,Phase, Lat, Long, Treatment, DTO)
+```
+Now summarise meta per subject id
+
+```{r}
+meta<-meta %>% group_by(subject_ids) %>% summarize(
+  Phase = unique(Phase),
+  Lat = unique(Lat),
+  Long = unique(Long),
+  Treatment = unique(Treatment),
+  DTO = unique(DTO)
+)
+```
+
+Now join them to assigned
+
+```{r}
+Assigned<-left_join(Assigned, meta)
+```
+
+save
 
 ```{r}
 write.csv(Assigned, here("Output", "PostZooniverse", "AssignedSpecies_prebait_incomplete.csv"))

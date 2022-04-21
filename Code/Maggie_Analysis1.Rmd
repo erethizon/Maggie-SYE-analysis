@@ -1,19 +1,138 @@
 ---
-title: "R Notebook"
+title: "First pass at Maggie's AIM vs. Snapshot analysis"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+Overview: First pass at Maggie's data analysis
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+set things up
 
 ```{r}
-plot(cars)
+rm(list = ls())
+library(tidyverse)
+library(here)
+library(lubridate)
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+Pull in data
+```{r}
+df<-read.csv(here("Output", "PostZooniverse", "AssignedSpecies_prebait_incomplete.csv"))
+```
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+Now pull in camera data
+```{r}
+ct<-read.csv(here("Data", "PostZooniverse","cameratrapdata2021.csv"))
+```
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+Let's summarize the dataset and look for possible errors
+
+```{r}
+summary(df)
+```
+Let's convert Treatment to a factor variable and DTO to a date time object.
+
+```{r}
+#factor first
+df$Treatment<-as.factor(df$Treatment)
+df$DTO<-mdy_hm(df$DTO)
+```
+
+Treatment appears to have 3 levels but should only have 2. Let's fix that.
+
+```{r}
+unique(df$Treatment)
+levels(df$Treatment)
+```
+Let's change all the ones with "Snap" to "Snapshot"
+
+First, we have to find all the rows in which Treatment == Snap
+
+```{r}
+fix<-which(df$Treatment == "Snap")
+df$Treatment[fix]<-"Snapshot"
+df$Treatment<-factor(df$Treatment)
+levels(df$Treatment)
+```
+
+
+
+Let's look at how many species were detected
+
+```{r}
+num_species<-length(unique(df$choice))
+species<-unique(df$choice)
+species
+```
+Now let's plot the number of each species as a function of treatment
+
+```{r}
+Species_summary<-df %>% group_by(choice, Treatment) %>% summarise(
+  num_obs = length(choice)
+
+)
+```
+Now make a plot of the number of observations of each species as a function of treatment
+
+```{r}
+ggplot(Species_summary, aes(choice, num_obs, fill = Treatment))+
+  geom_col(position = "dodge")+
+  labs(y = "Number of observations")+
+  coord_flip()
+```
+Now it would be nice to be able to extract the camera and sd card number from DF so we can join to the ct data. Let's use str_sub to do so.
+
+First, use `str_sub` to isolate camera number and sd card number in df
+
+```{r}
+df<-df %>% mutate(
+  Cam = str_sub(Img1,3,4),
+  SD = str_sub(Img1,9, 10),
+  Cam_SD = paste0(Cam,"-", SD)
+)
+```
+Now go to ct and do similar
+
+```{r}
+ct<-ct %>% mutate(
+  Cam = Camera_number,
+  SD = SD_num,
+  Cam_SD = paste0(Cam,"-", SD)
+)
+```
+
+Now we can join the two data frames together!
+```{r}
+mydata<-left_join(df,ct, by = "Cam_SD")
+```
+Now calculate trap nights; first convert character to date
+```{r}
+mydata$start_date<-dmy(mydata$start_date)
+mydata$retrieval_date<-dmy(mydata$retrieval_date)
+```
+Now calculate trap nights
+
+```{r}
+mydata<-mydata %>% mutate(
+  Trap_nights = retrieval_date-start_date
+)
+```
+
+Now we need to calculate observations per trap night
+
+```{r}
+Species_summary<-mydata %>% group_by(choice, Cam_SD,Treatment) %>% summarise(
+  num_obs = length(choice),
+  trap_nights = max(Trap_nights)
+
+)
+```
+Now calculate observation per 100 trap nights
+```{r}
+Species_summary<-Species_summary %>% mutate(
+  obs_per_nt = num_obs/as.numeric(trap_nights),
+  obs_per_100 = obs_per_nt*100
+)
+```
+
+
 
