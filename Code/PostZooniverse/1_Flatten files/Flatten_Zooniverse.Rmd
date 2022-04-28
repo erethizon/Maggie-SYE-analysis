@@ -92,13 +92,20 @@ Now move subject_ids column to left most position
 Flattened<-Flattened %>% relocate(subject_ids)
 ```
 
+
+Now extract just Maggie's data
+
+```{r}
+Flattened<-Flattened %>% filter(Treatment == "Snap" | Treatment == "Snapshot" | Treatment == "AIM")
+```
+
 Now Save our result! This will go in the flattened folder within the PostZooniverse outputs.
 ```{r}
 output<-here("Output", "PostZooniverse", "Flattened")
 
 myFile<-str_remove(filename, ".csv") #drop the .csv temporarily
 
-write.csv(Flattened,  paste0(output, "/",myFile,"_","_flat_", Sys.Date(), ".csv"))
+write.csv(Flattened,  paste0(output, "/",myFile,"_","flat_", Sys.Date(), ".csv"))
 
 ```
 

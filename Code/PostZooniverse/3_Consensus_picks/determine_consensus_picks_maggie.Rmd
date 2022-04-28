@@ -46,7 +46,6 @@ Flat <- read.csv(flat_file_path) #obviously, put correct file name here
 Filter the data to include just Maggie's project and then get rid of unneccessary columns and clean things up.
 
 ```{r}
-Flat<-Flat %>% filter(Phase == "prebait")
 #columns to delete
 Dump<-c("X", "task_label","round", "Img1", "Img2", "Img3", "CamNum", "SD_card_num", "Event", "Batch", "Round2","CamNum2", "SDCard2", "For_type", "For_name", "SDCard3")
 Flat<-Flat %>% select(!Dump)
@@ -129,7 +128,7 @@ species_votes <- grouped_classifications %>%
 When num_votes > num_class you have a situation where there was more than one species detected in an event (typically Gus and one or more camera trappers.). In these cases, propvote will not equal propclass, and the sum of propclass for that subject id will be greater than 1.0 (though the sum of propvote will be equal to 1.)
 
 ```{r}
-MoreThan1<-species_votes %>% filter(num_votes > num_class)
+MoreThan1<-species_votes %>% filter(votes > num_class)
 ```
 They each show the same subject_ids so things look good.
 
@@ -145,7 +144,7 @@ subjects_to_check<-species_votes %>% filter(agg_num_species > 1)
 Now we want to filter out the cases for which propvote = propclass and propclass is 0.8 or greater or 0.2 or smaller.
 
 ```{r}
-species_votes_to_check<- subjects_to_check %>% filter((propvote == propclass) & (between(propclass, 0.21, 0.79)))
+species_votes_to_check<- subjects_to_check %>% filter((propvote == propclass) & (between(propclass, 0.19, 0.79)))
 ```
 Now get the list of the subject ids in species_votes_to_check and use it to filter cleaned_classifications to get the list of subjects, images, events etc. to check.
 
@@ -197,7 +196,7 @@ for(i in 1:length(Subjects)){
 Now save
 
 ```{r}
-write.csv(Checklist, here("Output", "PostZooniverse","files_to_check_incomplete_prebait_test.csv"))
+write.csv(Checklist, here("Output", "PostZooniverse","files_to_check_28April2022.csv"))
 ```
 
 Now we need to assign the correct species for the files that we are not checking:
@@ -268,7 +267,7 @@ Assigned<-left_join(Assigned, meta)
 save
 
 ```{r}
-write.csv(Assigned, here("Output", "PostZooniverse", "AssignedSpecies_prebait_incomplete.csv"))
+write.csv(Assigned, here("Output", "PostZooniverse", "AssignedSpecies_28April2022.csv"))
 ```
 
 
