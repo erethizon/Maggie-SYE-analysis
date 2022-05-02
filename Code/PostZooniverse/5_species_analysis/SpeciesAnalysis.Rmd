@@ -99,6 +99,44 @@ DF$DTO<-mdy_hm(DF$DTO)
 DF$start_date<-dmy(DF$start_date)
 DF$retrieval_date<-dmy(DF$retrieval_date)
 ```
+
+Now that we have those in as dates, let's get a summary of them:
+
+```{r}
+summary(DF$DTO)
+```
+Uh-oh! Some of the camera dates are incorrect, as we did not have cameras set in 2017. Let's take a look and try to fix that.
+
+```{r}
+bad_dates<-DF %>% filter(year(DTO) < 2021)
+```
+These are all human camera trappers. I'll try to fix, but can basically ignore if it doesn't work very well.
+
+```{r}
+good_dates<-ymd_hms(c("2021-10-17 14:50:00", "2021-10-17 14:51:00", "2021-10-04 16:23:00"))
+subs<-bad_dates$subject_ids
+fix<-which(DF$subject_ids %in% subs)
+DF$DTO[fix]<-good_dates
+summary(DF$DTO)
+```
+Now let's look at start and end dates
+```{r}
+summary(DF$start_date)
+summary(DF$retrieval_date)
+```
+I can see that there is a retrieval date that is set for november 2022, a date that hasn't happened yet!  Need to fix that
+
+```{r}
+funky<-DF %>% filter(retrieval_date == "2022-11-16")
+fixem<-funky$subject_ids
+fix<-which(DF$subject_ids %in% fixem)
+DF$retrieval_date[fix]<-ymd("2021-11-16")
+summary(DF$retrieval_date)
+```
+Good!
+
+
+
 Now write some code to calculate the cumulative number of species over days for each camera.
 
 Begin by arranging DF by Cam_SD and then start_date
