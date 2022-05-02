@@ -33,7 +33,7 @@ Try with the `choose_file_isolate_workflow` function
 ```{r}
 DF<-choose_file_isolate_workflow()
 data<-DF[[1]]
-filename<-"flat_is_there_animal"
+filename<-DF[[2]]
 ```
 Now isolate to just the classification dates that match Maggie's project:
 
@@ -98,9 +98,9 @@ Now Save our result! This will go in the flattened folder within the PostZoonive
 ```{r}
 output<-here("Output", "PostZooniverse", "Flattened")
 
-#myFile<-str_remove(filename, ".csv") #drop the .csv temporarily
+myFile<-str_remove(filename, ".csv") #drop the .csv temporarily
 
-write.csv(Flattened,  paste0(output, "/",filename,"-", Sys.Date(), ".csv"))
+write.csv(Flattened,  paste0(output, "/",myFile,"_","flat_", Sys.Date(), ".csv"))
 
 ```
 
