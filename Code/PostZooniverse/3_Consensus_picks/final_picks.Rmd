@@ -1,0 +1,149 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Introduction
+Now that Maggie and I have both looked at all of the images for which there was an uncertain classification, it is time to pull together all of the data for analysis.  This step entails pulling in the "files_to_check" file with the "AssignedSpecies_28April2022".
+
+Set things up
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(here)
+```
+
+Now pull in the two data files
+
+```{r}
+complete<-read.csv(here("Output", "PostZooniverse","AssignedSpecies_28April2022.csv"))
+to_add<-read.csv(here("Data", "PostZooniverse", "files_to_check_29April2022.csv"))
+subjects_to_fix<-read.csv(here("Output", "PostZooniverse", "subjects_to_fix.csv"))
+```
+Check and make sure that none of the subject_ids in to_add are also in complete
+
+```{r}
+check <-which(complete$subject_ids %in% to_add$subject_ids)
+```
+There are 49 subject ids present in both data sets. Let's take a look. (not sure how this happened...)
+
+Since they are in to_add, we'll delete them from complete
+
+```{r}
+complete<-complete[-check,]
+```
+
+Now correct by using my final designations at the choices. First fix names
+
+```{r}
+unique(complete$choice)
+```
+now look at my choices
+
+```{r}
+unique(to_add$Erika.final)
+```
+
+```{r}
+fix<-which(to_add$Erika.final == "bluejay" )
+to_add$Erika.final[fix]<- "BLUEJAY"
+fix<-which(to_add$Erika.final == "Other bird")
+to_add$Erika.final[fix] <- "OTHERBIRD"
+fix<-which(to_add$Erika.final == "grouse ruffed")
+to_add$Erika.final[fix] <- "GROUSERUFFED"
+fix<-which(to_add$Erika.final == "squirrel red")
+to_add$Erika.final[fix]<-"SQUIRRELRED"
+fix<-which(to_add$Erika.final == "squirrel gray")
+to_add$Erika.final[fix]<- "SQUIRRELGRAY"
+fix<-which(to_add$Erika.final == "other small mammal")
+to_add$Erika.final[fix]<-"OTHERSMALLMAMMAL"
+fix<-which(to_add$Erika.final == "snowshoe hare")
+to_add$Erika.final[fix]<-"SNOWSHOEHARE"
+fix<-which(to_add$Erika.final == "raccoon")
+to_add$Erika.final[fix]<-"RACCOON"
+fix<-which(to_add$Erika.final == "squirrel flying")
+to_add$Erika.final[fix]<- "SQUIRRELFLYING"
+
+fix<-which(to_add$Erika.final == "chipmunk")
+to_add$Erika.final[fix]<- "CHIPMUNK"
+
+fix<-which(to_add$Erika.final == "porcupine")
+to_add$Erika.final[fix]<- "PORCUPINE"
+
+fix<-which(to_add$Erika.final == "deer whitetailed")
+to_add$Erika.final[fix]<- "DEERWHITETAILED"
+
+fix<-which(to_add$Erika.final == "fox red")
+to_add$Erika.final[fix]<- "FOXRED"
+
+fix<-which(to_add$Erika.final == "fisher")
+to_add$Erika.final[fix]<- "FISHER"
+
+fix<-which(to_add$Erika.final == "fisher ")
+to_add$Erika.final[fix]<- "FISHER"
+
+fix<-which(to_add$Erika.final == "squirrel unknown")
+to_add$Erika.final[fix]<- "SQUIRRELUNKNOWN"
+
+fix<-which(to_add$Erika.final == "coyote")
+to_add$Erika.final[fix]<- "COYOTE"
+
+fix<-which(to_add$Erika.final == "mink")
+to_add$Erika.final[fix]<- "MINK"
+
+fix<-which(to_add$Erika.final == "no animal")
+to_add$Erika.final[fix]<- "unknown"
+
+fix<-which(to_add$Erika.final == "owl")
+to_add$Erika.final[fix]<- "OWL"
+
+fix<-which(to_add$Erika.final == "other bird" |to_add$Erika.final == "other bird ")
+to_add$Erika.final[fix]<- "OTHERBIRD"
+
+fix<-which(to_add$Erika.final == "domestic dog")
+to_add$Erika.final[fix]<- "DOMESTICDOG"
+
+unique(to_add$Erika.final)
+```
+Now add to_add$Erika.final as choice to subjects_to_fix
+
+start by putting them both in order by subject_ids
+
+```{r}
+to_add<-to_add %>% arrange(subject_ids)
+subjects_to_fix<-subjects_to_fix %>% arrange(subject_ids)
+```
+
+
+```{r}
+subjects_to_fix<-subjects_to_fix %>% mutate(
+  choice = to_add$Erika.final
+)
+```
+
+Now fix the column order to then join by rbind
+
+```{r}
+subjects_to_fix<-subjects_to_fix %>% relocate(choice, .after = CamNum)
+```
+Now check that it workd
+```{r}
+colnames(complete) == colnames(subjects_to_fix)
+```
+so put them together
+```{r}
+complete<-rbind(complete, subjects_to_fix)
+```
+
+Now make sure there aren't repeating subject_ids
+```{r}
+length(unique(complete$subject_ids))
+```
+Great! Now save!
+
+```{r}
+write.csv(complete, here("Output", "PostZooniverse", "Maggie_final_species.csv"))
+```
+
+
+

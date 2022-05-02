@@ -193,6 +193,13 @@ for(i in 1:length(Subjects)){
   Checklist$CamNum[i]<-unique(mySample$CamNum)
 }
 ```
+Now make a version that includes the full metadata to which we will replace the choices once they are corrected
+
+```{r}
+subjects_to_fix<-Checklist
+```
+
+
 Now save
 
 ```{r}
@@ -263,6 +270,16 @@ Now join them to assigned
 ```{r}
 Assigned<-left_join(Assigned, meta)
 ```
+And now join them to subject_to_fix
+```{r}
+subjects_to_fix<-left_join(subjects_to_fix, meta)
+```
+and save
+```{r}
+write.csv(subjects_to_fix,here("Output", "PostZooniverse","subjects_to_fix.csv"))
+```
+
+
 
 save
 
