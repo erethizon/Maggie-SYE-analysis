@@ -1,0 +1,265 @@
+---
+title: "Species analysis"
+output: html_notebook
+---
+
+## Introduction
+This is the .Rmd file for doing the final species analysis for Maggie's Aim_v_Snap project. It uses the file called "Maggie_final_species.csv" located in the project Output folder as the data.
+
+## Initial set up and tidy up
+Set things up and pull in data
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(here)
+library(lubridate)
+
+DF<-read.csv(here("Output", "PostZooniverse", "Maggie_final_species.csv"))
+```
+
+Let's take a look at the data
+```{r}
+summary(DF)
+```
+Now let's clean things up
+
+```{r}
+DF<-DF[,3:14] #get rid of unwanted columns
+unique(DF$Treatment)
+```
+Fix Snap to Snapshot
+
+```{r}
+fix<-which(DF$Treatment == "Snap")
+DF$Treatment[fix]<-"Snapshot"
+unique(DF$Treatment)
+```
+Now check species
+```{r}
+unique(DF$choice)
+```
+Looks good.
+
+Now check Phase
+```{r}
+unique(DF$Phase)
+```
+Combine all the phase 1 types into one category
+
+```{r}
+fix<-which(DF$Phase == "phase 1 batch 1"|DF$Phase == "phase 1 batch 2")
+DF$Phase[fix]<-"experiment"
+unique(DF$Phase)
+```
+Now make a column that combines phase and treatment
+```{r}
+DF<-DF %>% mutate(
+  Phase_Treat = paste0(Treatment,"-",Phase)
+)
+```
+
+## Species - area curves
+
+It would be nice to know the cumulative number of species as you increase camera trap nights. To get this, we need to join to Maggie's table about cameras.
+```{r}
+cams<-read.csv(here("Data", "cameratrapdata2021.csv"))
+```
+Check cams for issues
+
+```{r}
+summary(cams)
+```
+Make some dates
+```{r}
+cams$start_date<-dmy(cams$start_date)
+cams$retrieval_date<-dmy(cams$retrieval_date)
+summary(c(cams$start_date, cams$retrieval_date))
+```
+I can see that there is a retrieval date that is set for november 2022, a date that hasn't happened yet!  Need to fix that
+
+```{r}
+funky<-which(cams$retrieval_date == "2022-11-16")
+cams$retrieval_date[funky]<-ymd("2021-11-16")
+summary(cams$retrieval_date)
+```
+
+
+Now get a cam_sd column in DF to join by
+
+```{r}
+DF<-DF %>% mutate(
+  Cam_SD = str_sub(Img1, 1,10)
+)
+```
+
+Now join
+```{r}
+DF<-left_join(DF, cams, by = "Cam_SD")
+```
+Now let's calculate trap nights. Need to make some date vars to do so.
+
+```{r}
+DF$DTO<-mdy_hm(DF$DTO)
+```
+
+Now that we have those in as dates, let's get a summary of them:
+
+```{r}
+summary(DF$DTO)
+```
+Uh-oh! Some of the camera dates are incorrect, as we did not have cameras set in 2017. Let's take a look and try to fix that.
+
+```{r}
+bad_dates<-DF %>% filter(year(DTO) < 2021)
+```
+These are all human camera trappers. I'll try to fix, but can basically ignore if it doesn't work very well.
+
+```{r}
+good_dates<-ymd_hms(c("2021-10-17 14:50:00", "2021-10-17 14:51:00", "2021-10-04 16:23:00"))
+subs<-bad_dates$subject_ids
+fix<-which(DF$subject_ids %in% subs)
+DF$DTO[fix]<-good_dates
+summary(DF$DTO)
+```
+Now let's look at start and end dates
+```{r}
+summary(DF$start_date)
+summary(DF$retrieval_date)
+```
+Good!
+
+Now calculate trap nights per camera
+
+```{r}
+DF<-DF %>% mutate(
+  cam_nights = as.integer(retrieval_date - start_date)
+)
+summary(DF$cam_nights)
+```
+
+Now get summary of cam nights per camera and phase
+
+```{r}
+CamNightSummary<-DF %>% group_by(Phase, Treatment, Cam_SD) %>% summarise(
+  tot_cam_nights = max(cam_nights)
+)
+```
+
+Now write some code to calculate the cumulative number of species over days for each camera.
+
+Need a function that will:
+1. Create a data frame or list to store results; that is what will be returned. Columns should include: Cam_SD, phase_treatment,      cumulative_day, cum_num_species
+2. Grab the data for a single camera 
+3. Put the data in order by date time of observation (DTO)
+4. Assign each date to a day number for counting the number of species on each day
+5. Loop through each camera and do the calculating and assigning.
+
+Let's call it "species_cam_nights"
+
+```{r}
+species_cam_nights<-function(df){
+  df<-df %>% arrange(Cam_SD, DTO)
+  num_cams<-length(unique(df$Cam_SD))
+  cams<-unique(df$Cam_SD)
+  total_species<-length(unique(df$choice))
+  df$day<-NA
+  Species<-vector()
+  
+  newDF<-data.frame(Cam_SD = character(length(df$DTO)),
+                    Phase_Treat = character(length(df$DTO)),
+                    DTO = POSIXct(length(df$DTO)),
+                    cumulative_day = integer(length(df$DTO)),
+                    num_species = integer(length(df$DTO)))
+  
+  #loop to assign day, num species
+  for (i in 1:num_cams){
+    data<-df %>% filter(Cam_SD == cams[i])
+    num_rows<-length(data$Cam_SD)
+    for (a in 1:num_rows){
+      
+      #next 4 lines of code are wrong - need to figure out what the next empty row in the newDF data frame is and start filling from there - this code writes over the existing code. 
+      newDF$Cam_SD[a]<- data$Cam_SD[a]
+      newDF$Phase_Treat[a]<-data$Phase_Treat[a]
+      newDF$DTO[a]<-data$DTO[a]
+      Species[a]<-data$choice[a]
+      if (a == 1){
+        newDF$num_species[a]<- length(unique(Species))
+        newDF$cumulative_day[a]<-1
+      } else{
+            Day_test<- (day(data$DTO[a]) == day(data$DTO[a-1]))
+              if(Day_test == TRUE){
+                  newDF$cumulative_day[a]<-newDF$cumulative_day[a-1]}
+              else {newDF$cumulative_day[a] <- newDF$cumulative_day[a-1]+1}
+            newDF$num_species[a]<-length(unique(Species[1:a]))
+          }
+      }
+  }
+  return(newDF)
+}
+```
+Try it
+```{r}
+test<-species_cam_nights(DF)
+```
+
+  
+  #loop to assign day
+  for(i in 1:num_cams){
+    data<-df %>% filter(Cam_SD == cams[i])#grab the data
+    num_rows<-length(data$Cam_SD)
+    data$day[1]<-1 #assign first day as 1
+    start_date<-data$DTO[1]
+      for(z in 2:num_rows){
+        data$day[z]<-as.integer(round(difftime(data$DTO[z], data$DTO[z-1], units = "days")))
+        data$cum_day[z]<-as.integer(round(difftime(data$DTO[z],start_date, units = "days")))
+      }
+    #now replace those subject ids in df
+    sub_ids<-unique(data$subject_ids)
+    swap<-which(df$subject_ids %in% sub_ids)
+    df[swap,]<-data
+  }
+  df<-df %>% relocate(day, .after = DTO)
+  return(df)
+}
+```
+
+Now use the function
+```{r}
+DF<-species_cam_nights(DF)
+```
+Now write a second function to do steps 3 and 4. Call it species_per_day
+
+```{r}
+species_per_day<-function(df){
+  num_cams<-length(unique(df$Cam_SD))
+  cams = unique(df$Cam_SD)
+  #create empty data frame
+  newDF<-data.frame(Cam_SD = character(),
+                    Phase_Treat = character(),
+                    cumulative_day = integer(),
+                    cumulative_species = integer())
+  
+  #loop through df by camera
+  for (i in 1:num_cams){
+    df_subset<-df %>% filter(Cam_SD == cams[1]) #grab data from first camera
+    #add cumulative days column
+    df_subset$cum_days<-cumsum(df_subset$day)
+    num_rows <-length(df_subset$Cam_SD)
+    for (z in 1:num_rows){
+      newDF$Cam_SD[z]<-df_subset$Cam_SD[z]
+      newDF$Phase_Treat[z]<-df_subset$Phase_Treat
+      newDF$cumulative_day = df_subset$cum_days[z]
+      if (z == 1){
+        newDF$cumulative_species <-1
+        pool = df_subset$choice[z]
+      } else {
+        pool = c(pool, df_subset$choice[z])
+        newDF$cumulative_species<-length(unique(pool))
+      }
+      
+    }
+  }
+  return(newDF)
+}
+```
+
