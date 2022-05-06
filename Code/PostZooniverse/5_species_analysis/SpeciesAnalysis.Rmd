@@ -80,6 +80,26 @@ It would be nice to know the cumulative number of species as you increase camera
 ```{r}
 cams<-read.csv(here("Data", "cameratrapdata2021.csv"))
 ```
+Check cams for issues
+
+```{r}
+summary(cams)
+```
+Make some dates
+```{r}
+cams$start_date<-dmy(cams$start_date)
+cams$retrieval_date<-dmy(cams$retrieval_date)
+summary(c(cams$start_date, cams$retrieval_date))
+```
+I can see that there is a retrieval date that is set for november 2022, a date that hasn't happened yet!  Need to fix that
+
+```{r}
+funky<-which(cams$retrieval_date == "2022-11-16")
+cams$retrieval_date[funky]<-ymd("2021-11-16")
+summary(cams$retrieval_date)
+```
+
+
 Now get a cam_sd column in DF to join by
 
 ```{r}
@@ -96,8 +116,6 @@ Now let's calculate trap nights. Need to make some date vars to do so.
 
 ```{r}
 DF$DTO<-mdy_hm(DF$DTO)
-DF$start_date<-dmy(DF$start_date)
-DF$retrieval_date<-dmy(DF$retrieval_date)
 ```
 
 Now that we have those in as dates, let's get a summary of them:
@@ -124,17 +142,45 @@ Now let's look at start and end dates
 summary(DF$start_date)
 summary(DF$retrieval_date)
 ```
-I can see that there is a retrieval date that is set for november 2022, a date that hasn't happened yet!  Need to fix that
-
-```{r}
-funky<-DF %>% filter(retrieval_date == "2022-11-16")
-fixem<-funky$subject_ids
-fix<-which(DF$subject_ids %in% fixem)
-DF$retrieval_date[fix]<-ymd("2021-11-16")
-summary(DF$retrieval_date)
-```
 Good!
 
+Now calculate trap nights per camera
+
+```{r}
+DF<-DF %>% mutate(
+  cam_nights = as.integer(retrieval_date - start_date)
+)
+summary(DF$cam_nights)
+```
+
+Now get summary of cam nights per camera and phase
+
+```{r}
+CamNightSummary<-DF %>% group_by(Phase, Treatment, Cam_SD) %>% summarise(
+  tot_cam_nights = max(cam_nights)
+)
+```
+
+Is there a difference in the mean # cam nights between phases, treatments? 2-way anova
+```{r}
+m1<-aov(tot_cam_nights~Phase*Treatment,  data = CamNightSummary)
+anova(m1)
+summary(m1)
+```
+And plot
+
+```{r}
+effort<-CamNightSummary %>% group_by(Phase, Treatment ) %>% summarise(
+  meanCamNights = mean(tot_cam_nights, na.rm = T),
+  sdCamNights = sd(tot_cam_nights, na.rm = T)
+)
+```
+And plot
+```{r}
+ggplot(effort, aes(Phase, meanCamNights, color = Treatment, group = Treatment))+
+  geom_point()+
+  geom_line()
+```
 
 
 Now write some code to calculate the cumulative number of species over days for each camera.
@@ -157,15 +203,56 @@ species_cam_nights<-function(df){
   df<-df %>% arrange(Cam_SD, DTO)
   num_cams<-length(unique(df$Cam_SD))
   cams<-unique(df$Cam_SD)
+  total_species<-length(unique(df$choice))
   df$day<-NA
+  Species<-vector()
+  
+  newDF<-data.frame(Cam_SD = character(length(df$DTO)),
+                    Phase_Treat = character(length(df$DTO)),
+                    DTO = POSIXct(length(df$DTO)),
+                    cumulative_day = integer(length(df$DTO)),
+                    num_species = integer(length(df$DTO)))
+  
+  
+  #loop to assign day, num species
+  for (i in 1:num_cams){
+    data<-df %>% filter(Cam_SD == cams[i])
+    num_rows<-length(data$Cam_SD)
+    data$day[1]<-1
+    for(a in 1:num_cams){
+      newDF$Cam_SD[a]<- data$Cam_SD[a]
+      newDF$Phase_Treat[a]<-data$Phase_Treat[a]
+      if (a == 1){
+        Species[a]<-data$choice[a]
+        newDF$num_species[a]<- length(unique(Species))
+        newDF$cumulative_day[a]<-1
+      } else{
+            Day_test<- (day(data$DTO[a]) == day(data$DTO[a-1]))
+              if(Day_test == TRUE){
+                  newDF$cumulative_day[a]<-newDF$cumulative_day[a-1]}
+              else {newDF$cumulative_day[a] <- newDF$cumulative_day[a-1]+1}
+            Species[a]<-data$choice[a]
+            newDF$num_species[a]<-length(unique(Species[1:a]))
+          }
+      }
+    }
+}
+```
+Try it
+```{r}
+test<-species_cam_nights(DF)
+```
+
   
   #loop to assign day
   for(i in 1:num_cams){
     data<-df %>% filter(Cam_SD == cams[i])#grab the data
     num_rows<-length(data$Cam_SD)
     data$day[1]<-1 #assign first day as 1
+    start_date<-data$DTO[1]
       for(z in 2:num_rows){
         data$day[z]<-as.integer(round(difftime(data$DTO[z], data$DTO[z-1], units = "days")))
+        data$cum_day[z]<-as.integer(round(difftime(data$DTO[z],start_date, units = "days")))
       }
     #now replace those subject ids in df
     sub_ids<-unique(data$subject_ids)
@@ -177,4 +264,43 @@ species_cam_nights<-function(df){
 }
 ```
 
-This function is working but I need to fix some dates on some of the cameras - the DTO is incorrect on some of the events.
+Now use the function
+```{r}
+DF<-species_cam_nights(DF)
+```
+Now write a second function to do steps 3 and 4. Call it species_per_day
+
+```{r}
+species_per_day<-function(df){
+  num_cams<-length(unique(df$Cam_SD))
+  cams = unique(df$Cam_SD)
+  #create empty data frame
+  newDF<-data.frame(Cam_SD = character(),
+                    Phase_Treat = character(),
+                    cumulative_day = integer(),
+                    cumulative_species = integer())
+  
+  #loop through df by camera
+  for (i in 1:num_cams){
+    df_subset<-df %>% filter(Cam_SD == cams[1]) #grab data from first camera
+    #add cumulative days column
+    df_subset$cum_days<-cumsum(df_subset$day)
+    num_rows <-length(df_subset$Cam_SD)
+    for (z in 1:num_rows){
+      newDF$Cam_SD[z]<-df_subset$Cam_SD[z]
+      newDF$Phase_Treat[z]<-df_subset$Phase_Treat
+      newDF$cumulative_day = df_subset$cum_days[z]
+      if (z == 1){
+        newDF$cumulative_species <-1
+        pool = df_subset$choice[z]
+      } else {
+        pool = c(pool, df_subset$choice[z])
+        newDF$cumulative_species<-length(unique(pool))
+      }
+      
+    }
+  }
+  return(newDF)
+}
+```
+
