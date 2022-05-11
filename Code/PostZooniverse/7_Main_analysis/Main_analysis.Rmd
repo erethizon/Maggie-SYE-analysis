@@ -11,6 +11,74 @@ library(tidyverse)
 library(lubridate)
 library(here)
 ```
+1. Is there a difference in how many images were misfires or in total images taken between treatments, phases?
 
-## 1. Camera information
-Open the data on cameras and fix it for general use
+pull in is_there_a_species data
+```{r}
+DF<-read.csv(here("Data", "Maggie_clean_is_there_species.csv"))
+```
+Get a summary by camera, phase, treatment of number of images of each type (misfire, animal present)
+
+```{r}
+Camera_summary<-DF %>% group_by(CamSD, Phase, Treatment,  value) %>% summarise(
+ num_responses = length(value)
+)
+```
+Now get total number of events so that I can calculate percent of images that are misfires
+```{r}
+totals<-DF %>% group_by(CamSD, Phase, Treatment) %>% summarise(
+  num_events = length(value)
+)
+```
+Join num_events to Cam summary
+```{r}
+Camera_summary<-left_join(Camera_summary, 
+                          totals %>% dplyr::select(num_events),
+                          by = "CamSD")
+Camera_summary<-Camera_summary %>% select(-Phase.y)
+Camera_summary<-Camera_summary %>% mutate(
+  Percent = round(100*(num_responses/num_events), 2)
+)
+```
+now filter
+```{r}
+Percent_misfires<-Camera_summary %>% filter(value == "I don't think so")
+```
+
+Now see if there is a difference in the % misfires b/w phases, treatments. Use glm with binomial family since dealing with percent data.
+
+Need a new binomial column based on value
+
+```{r}
+Camera_summary$binom<-NA
+fix<-which(Camera_summary$value == "Yes")
+Camera_summary$binom[fix]<-1
+fix<-which(is.na(Camera_summary$binom))
+Camera_summary$binom[fix]<-0
+```
+
+Now run binomial glm (logistic regression...)
+```{r}
+per_mis<-glm(binom~Phase.x/Treatment, data = Camera_summary, family = binomial)
+summary(per_mis)
+anova(per_mis)
+```
+
+Plot
+```{r}
+cam_fire_summary<-Camera_summary %>% arrange(value, Treatment, Phase.x) %>% 
+      group_by(Phase.x, Treatment, value) %>% summarise(
+        tot_responses = sum(num_responses, na.rm = T),
+        avg_responses = mean(num_responses, na.rm = T), 
+        sd_responses = sd(num_responses, na.rm = T)
+          )
+```
+
+And make the graph
+```{r}
+ggplot(cam_fire_summary, aes(Treatment, avg_responses, color = value, group = value))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~Phase.x)
+```
+
