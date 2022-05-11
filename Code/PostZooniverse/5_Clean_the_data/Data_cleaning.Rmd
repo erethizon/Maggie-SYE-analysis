@@ -1,0 +1,324 @@
+---
+title: "Data cleaning"
+output: html_notebook
+---
+
+Cleaning up some of Maggie's data for general use.
+
+Set things up.
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(lubridate)
+library(here)
+```
+
+## 1. Camera information
+Pull in data
+
+```{r}
+cams<-read.csv(here("Data", "cameratrapdata2021.csv"))
+summary(cams)
+```
+Set dates
+```{r}
+cams$start_date<-dmy(cams$start_date)
+cams$retrieval_date<-dmy(cams$retrieval_date)
+summary(cams$start_date) #looks good
+summary(cams$retrieval_date)
+```
+Max of 2022-11-16 is incorrect, as that date hasn't happened yet. That date should be corrected to 2021-11-16
+
+```{r}
+fix<-which(cams$retrieval_date == "2022-11-16")
+cams$retrieval_date[fix]<-"2021-11-16"
+summary(cams$retrieval_date)
+```
+Now looks good. 
+
+Now check treatment, phase for factor levels
+```{r}
+unique(cams$phase)
+unique(cams$protocol)
+```
+Both look good.
+
+Now check forest names, habitat, setting
+```{r}
+unique(cams$forest)
+unique(cams$habitat)
+unique(cams$setting)
+```
+Now make snowstake distance into a numeric rather than character variable by removing the "m".
+
+```{r}
+cams$snow_stake_dist_m<-str_remove(cams$snowstake_dist, "m")
+cams<-select(cams, -snowstake_dist)
+cams<-cams %>% relocate(snow_stake_dist_m,.after = trig_delay_sec)
+```
+Looks good. 
+
+Now check lat/long and change column names
+
+Now save
+```{r}
+fixem<-colnames(cams)
+fixem[20]<-"Lat"
+fixem[21]<-"Long"
+colnames(cams)<-fixem
+```
+Now make all longitudes negative
+```{r}
+fix<-which(cams$Long > 1)
+cams$Long[fix]<-cams$Long[fix]*-1
+```
+and now check that there is only one lat/long per camera location (cams did not move but changed sd cards so can group by cams to see)
+
+```{r}
+cam_locations<-cams %>% group_by(Camera_number) %>% summarise(
+  num_Lats=length(unique(Lat)),
+  num_Longs = length(unique(Long))
+)
+```
+Looks good. Now save!
+
+```{r}
+write.csv(cams, here("Data", "maggie_clean_cam_data.csv"))
+```
+
+
+
+
+## 2. Is there a species data
+Read in the data
+```{r}
+is_there<-read.csv(here("Output", "PostZooniverse","Flattened", "flat_is_there_animal-2022-05-02.csv"))
+```
+Remove X column
+```{r}
+is_there<-select(is_there, -X)
+```
+Check phase and treatment
+
+```{r}
+unique(is_there$Phase)
+```
+Need to combine batch 1 and batch 2 of phase 1 into just phase 1.
+
+```{r}
+fix<-which(is_there$Phase == "phase 1 batch 1"|is_there$Phase == "phase 1 batch 2" )
+
+is_there$Phase[fix]<-"phase 1"
+unique(is_there$Phase)
+```
+Now look at treatment
+```{r}
+unique(is_there$Treatment)
+```
+Change "Snap" into "Snapshot"
+```{r}
+fix<-which(is_there$Treatment == "Snap")
+is_there$Treatment[fix]<-"Snapshot"
+unique(is_there$Treatment)
+```
+Check forest names
+```{r}
+unique(is_there$Forest)
+```
+Need to combine Whip into Whippoorwill
+```{r}
+fix<-which(is_there$Forest == "Whip")
+is_there$Forest[fix]<-"Whippoorwill"
+unique(is_there$Forest)
+```
+Now check dates and make into date field
+```{r}
+is_there$DTO<-mdy_hm(is_there$DTO)
+summary(is_there$DTO)
+```
+There are observations from 2017 which are likely not correct. Check them out.
+```{r}
+
+ggplot(is_there, aes(year(DTO)))+
+         geom_histogram()
+```
+There are a few images from 2019 and 2017 that must be camera setting errors. Let's check them out. 
+```{r}
+fix<-which(year(is_there$DTO) < "2020")
+check<-is_there %>% slice(fix)
+fix<-which(year(is_there$DTO) == "2017")
+is_there$DTO[c(1168,1466,1830)]<-"2021-10-17 2:50:00"
+is_there$DTO[c(2207,2410,2443)]<-"2021-10-17 2:51:00"
+fix<-which(year(is_there$DTO) == "2019")
+is_there$DTO[fix]<-"2021-10-24 4:39:00"
+summary(is_there$DTO)
+```
+
+Looks good. Now see if there are any cameras for which there is > 1 lat/long listed
+
+```{r}
+cam_locations<-is_there %>% group_by(CamSD) %>% summarise(
+ num_lat = length(unique(Lat)),
+ num_long = length(unique(Long))
+)
+```
+
+There is an issue with camera 49 sd 60
+
+```{r}
+c49_sd60<-is_there %>% filter(CamSD == "C049_SD060") %>% summarise(
+  camLats = unique(Lat), 
+  camLongs = unique(Long)
+)
+```
+Numbers are quite different - need to sort out. Correct numbers are Lat = 44.39964792, Long = 75.12164175
+
+```{r}
+fix<-which(is_there$CamSD == "C049_SD060" & is_there$Lat > 44.4)
+is_there$Lat[fix]<- 44.39964792
+is_there$Long[fix]<- -75.12164175
+```
+
+Ok! All fixed. Now save
+
+```{r}
+write.csv(is_there, here("Data", "Maggie_clean_is_there_species.csv"))
+```
+
+
+## 3. Species data
+Pull in data
+```{r}
+species<-read.csv(here("Output", "PostZooniverse", "Maggie_final_species.csv"))
+```
+
+Get rid of X.1 and X columns
+```{r}
+species<-species[, 3:14]
+```
+
+how are species choices defined?
+```{r}
+unique(species$choice)
+```
+
+Looks good.
+Add a column for taxon
+```{r}
+species$taxon <-NA
+choices<-unique(species$choice)
+birds<-c("BLUEJAY", "OTHERBIRD", "GROUSERUFFED", "TURKEY", "OWL")
+fix<-which(species$choice %in% birds)
+species$taxon[fix]<-"bird"
+mammals<-(which(!(species$choice %in% birds)))
+species$taxon[mammals]<-"mammal"
+```
+
+Add size and diet according to Maggie's classifications
+
+```{r}
+size<-read.csv(here("Data", "size_diet.csv"))
+ourchoices<-unique(species$choice)
+which(size$SPECIES %in% ourchoices)
+size$SPECIES[17]<- "unknown"
+```
+
+Now join to get a column of size and diet based on species
+
+```{r}
+species<-left_join(species,
+                   size %>% dplyr::select(DIET, AVG_SIZE_kg), 
+                   by = c("choice" = "SPECIES")
+                   )
+```
+
+Try chaning column name in size to match choice
+```{r}
+fixem<-colnames(size)
+fixem[1]<-"choice"
+colnames(size)<-fixem
+```
+Now try the join
+```{r}
+species<-left_join(species,
+                   size %>% dplyr::select(DIET, AVG_SIZE_kg),
+                   by = "choice")
+```
+
+This should be working and isn't so I'm moving on to a different way.
+
+```{r}
+size<-size %>% select(choice, DIET, AVG_SIZE_kg)
+species<-left_join(species, size)
+```
+
+check phases
+```{r}
+unique(species$Phase)
+```
+
+Need to merge phase 1 batches together
+```{r}
+fix<-which(species$Phase == "phase 1 batch 1" | species$Phase == "phase 1 batch 2")
+species$Phase[fix]<-"Phase 1"
+unique(species$Phase)
+```
+
+Check treatments
+```{r}
+unique(species$Treatment)
+```
+
+Need to combine Snapshot and Snap
+```{r}
+fix<-which(species$Treatment == "Snap")
+species$Treatment[fix]<- "Snapshot"
+unique(species$Treatment)
+```
+
+Now fix DTO
+```{r}
+species$DTO<-mdy_hm(species$DTO)
+summary(species$DTO)
+```
+
+As with before, I have dates in 2017 and 2019 that need fixing.
+
+```{r}
+fix<-which(year(species$DTO) == "2017")
+species$DTO[43]<-"2021-10-17 2:50:00"
+species$DTO[44]<-"2021-10-17 2:51:00"
+
+fix<-which(year(species$DTO)== "2019")
+species$DTO[fix]<-"2021-10-24 4:39:00"
+```
+
+
+Ok. Now deal with lat/long
+Start by adding camera/sd column to species
+```{r}
+species$SD<-str_sub(species$Img1, 6,10)
+species$Cam_SD<-paste0(species$CamNum, "_", species$SD)
+```
+
+```{r}
+place_sum<-species %>% group_by(Cam_SD) %>% summarise(
+  num_lats = length(unique(Lat)),
+  num_longs = length(unique(Long))
+)
+```
+
+Again need to fix cam 49 sd 60
+
+```{r}
+fix<-which(species$Cam_SD == "C049_SD060" & species$Lat > 44.4)
+species$Lat[fix]<- 44.39964792
+species$Long[fix]<- -75.12164175
+```
+Now write cleaned data set
+```{r}
+write.csv(species, here("Data", "maggie_clean_species.csv"))
+```
+
+

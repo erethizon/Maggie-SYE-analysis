@@ -1,0 +1,16 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Main analysis of Maggie's data
+
+Begin by setting things up:
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(lubridate)
+library(here)
+```
+
+## 1. Camera information
+Open the data on cameras and fix it for general use
